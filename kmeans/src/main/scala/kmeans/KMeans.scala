@@ -43,7 +43,8 @@ class KMeans extends KMeansInterface:
     // perform the classification using findClosest for each point
     var m = points.groupBy(x => findClosest(x, means))
     // add means without corresponding values to the ParMap with empty ParSeq
-    for (mean <- means) if (m.contains(mean) == false) {m.put(mean, ParSeq[Point]())}
+    for (mean <- means) if (m.contains(mean) == false) {m = m + (mean, ParSeq[Point]())}
+    m
   }
 
   def findAverage(oldMean: Point, points: ParSeq[Point]): Point = if points.isEmpty then oldMean else
@@ -57,15 +58,29 @@ class KMeans extends KMeansInterface:
     }
     Point(x / points.length, y / points.length, z / points.length)
 
-  def update(classified: ParMap[Point, ParSeq[Point]], oldMeans: ParSeq[Point]): ParSeq[Point] =
-    ???
+  def update(classified: ParMap[Point, ParSeq[Point]], oldMeans: ParSeq[Point]): ParSeq[Point] = {
+    //var newMeans = ParSeq[Point]()
+    //for (v <- oldMeans) {newMeans = newMeans + (findAverage(v, classified.get(v).get))}
+    oldMeans.map( (v) => findAverage(v, classified.get(v).get))
+    //for (idx <- (0 until oldMeans.length)) {
+    //  val oldMean = oldMeans.apply(idx)
+    //  newMeans(idx) = findAverage(oldMean, classified.get(oldMean).get)
+    //}
+    //newMeans
+  }
 
-  def converged(eta: Double, oldMeans: ParSeq[Point], newMeans: ParSeq[Point]): Boolean =
-    ???
+  def converged(eta: Double, oldMeans: ParSeq[Point], newMeans: ParSeq[Point]): Boolean = {
+    var return_val = true; var idx = 0
+    while (idx < oldMeans.length && return_val) {
+      if (oldMeans(idx).squareDistance(newMeans(idx)) > eta) {return_val = false}
+      idx = idx + 1
+    }
+    return_val
+  }
 
   @tailrec
   final def kMeans(points: ParSeq[Point], means: ParSeq[Point], eta: Double): ParSeq[Point] =
-    if (???) kMeans(???, ???, ???) else ??? // your implementation need to be tail recursive
+    if (converged(eta, means, update(classify(points, means), means)) == false) { kMeans(points, update(classify(points, means), means), eta) } else { return means } // your implementation need to be tail recursive
 
 /** Describes one point in three-dimensional space.
  *
