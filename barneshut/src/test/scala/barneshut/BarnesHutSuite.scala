@@ -6,10 +6,11 @@ import scala.math.*
 import scala.collection.parallel.*
 import barneshut.conctrees.ConcBuffer
 
-class BarnesHutSuite extends munit.FunSuite:
+class BarnesHutSuite extends munit.FunSuite {
   // test cases for quad tree
 
   import FloatOps.*
+
   test("Empty: center of mass should be the center of the cell") {
     val quad = Empty(51f, 46.3f, 5f)
     assert(quad.massX == 51f, s"${quad.massX} should be 51f")
@@ -57,14 +58,18 @@ class BarnesHutSuite extends munit.FunSuite:
     val quad = Empty(51f, 46.3f, 5f)
     val b = Body(3f, 54f, 46f, 0f, 0f)
     val inserted = quad.insert(b)
-    inserted match
-      case Leaf(centerX, centerY, size, bodies) =>
+    inserted match {
+      case Leaf(centerX, centerY, size, bodies)
+      => {
         assert(centerX == 51f, s"$centerX should be 51f")
         assert(centerY == 46.3f, s"$centerY should be 46.3f")
         assert(size == 5f, s"$size should be 5f")
         assert(bodies == Seq(b), s"$bodies should contain only the inserted body")
-      case _ =>
+      }
+      case _ => {
         fail("Empty.insert() should have returned a Leaf, was $inserted")
+      }
+    }
   }
 
   // test cases for Body
@@ -106,23 +111,29 @@ class BarnesHutSuite extends munit.FunSuite:
   }
 
   import scala.concurrent.duration.*
+
   override val munitTimeout = 10.seconds
 
-object FloatOps:
-  val precisionThreshold = 1e-4
+  object FloatOps {val precisionThreshold = 1e-4}
 
   /** Floating comparison: assert(float ~= 1.7f). */
-  extension (self: Float) def ~=(that: Float): Boolean =
+  extension(self: Float)
+
+  def ~=(that: Float): Boolean =
     abs(self - that) < precisionThreshold
 
   /** Long floating comparison: assert(double ~= 1.7). */
-  extension (self: Double) def ~=(that: Double): Boolean =
+  extension(self: Double)
+
+  def ~=(that: Double): Boolean =
     abs(self - that) < precisionThreshold
 
   /** Floating sequences comparison: assert(floatSeq ~= Seq(0.5f, 1.7f). */
-  extension (self: Seq[Float]) def ~=(that: Seq[Float]): Boolean =
+  extension(self: Seq[Float])
+
+  def ~=(that: Seq[Float]): Boolean =
     self.size == that.size &&
       self.zip(that).forall { case (a, b) =>
         abs(a - b) < precisionThreshold
       }
-
+}

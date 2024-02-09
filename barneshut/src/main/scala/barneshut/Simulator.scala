@@ -11,11 +11,22 @@ import scala.collection.parallel.CollectionConverters.*
 
 class Simulator(val taskSupport: TaskSupport, val timeStats: TimeStatistics):
 
-  def updateBoundaries(boundaries: Boundaries, body: Body): Boundaries =
-    ???
+  def updateBoundaries(boundaries: Boundaries, body: Body): Boundaries = {
+    if (body.x < boundaries.minX) {boundaries.minX = body.x}
+    if (body.x > boundaries.maxX) {boundaries.maxX = body.x}
+    if (body.y < boundaries.minY) {boundaries.minY = body.y}
+    if (body.y > boundaries.maxY) {boundaries.maxY = body.y}
+    boundaries
+  }
 
-  def mergeBoundaries(a: Boundaries, b: Boundaries): Boundaries =
-    ???
+  def mergeBoundaries(a: Boundaries, b: Boundaries): Boundaries = {
+    var new_bounds = new Boundaries
+    new_bounds.minX = a.minX.min(b.minX)
+    new_bounds.maxX = a.maxX.max(b.maxX)
+    new_bounds.minY = a.minY.min(b.minY)
+    new_bounds.maxY = a.maxY.max(b.maxY)
+    new_bounds
+  }
 
   def computeBoundaries(bodies: coll.Seq[Body]): Boundaries = timeStats.timed("boundaries") {
     val parBodies = bodies.par
@@ -26,7 +37,9 @@ class Simulator(val taskSupport: TaskSupport, val timeStats: TimeStatistics):
   def computeSectorMatrix(bodies: coll.Seq[Body], boundaries: Boundaries): SectorMatrix = timeStats.timed("matrix") {
     val parBodies = bodies.par
     parBodies.tasksupport = taskSupport
-    ???
+    val sec_mat = new SectorMatrix(boundaries, SECTOR_PRECISION)
+    val new_mat = bodies.aggregate(sec_mat)((s, b) => s += b, (s1, s2) => s1.combine(s2))
+    new_mat
   }
 
   def computeQuad(sectorMatrix: SectorMatrix): Quad = timeStats.timed("quad") {
@@ -36,7 +49,7 @@ class Simulator(val taskSupport: TaskSupport, val timeStats: TimeStatistics):
   def updateBodies(bodies: coll.Seq[Body], quad: Quad): coll.Seq[Body] = timeStats.timed("update") {
     val parBodies = bodies.par
     parBodies.tasksupport = taskSupport
-    ???
+    parBodies.map( b => b.updated(quad) ).seq
   }
 
   def eliminateOutliers(bodies: coll.Seq[Body], sectorMatrix: SectorMatrix, quad: Quad): coll.Seq[Body] = timeStats.timed("eliminate") {

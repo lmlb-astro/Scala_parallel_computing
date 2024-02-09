@@ -44,31 +44,54 @@ sealed abstract class Quad extends QuadInterface:
   def insert(b: Body): Quad
 
 case class Empty(centerX: Float, centerY: Float, size: Float) extends Quad:
-  def massX: Float = ???
-  def massY: Float = ???
-  def mass: Float = ???
-  def total: Int = ???
-  def insert(b: Body): Quad = ???
+  def massX: Float = centerX
+  def massY: Float = centerY
+  def mass: Float = 0
+  def total: Int = 0
+  def insert(b: Body): Quad = {Leaf(centerX, centerY, size, coll.Seq[Body](b))}
 
 case class Fork(
   nw: Quad, ne: Quad, sw: Quad, se: Quad
 ) extends Quad:
-  val centerX: Float = ???
-  val centerY: Float = ???
-  val size: Float = ???
-  val mass: Float = ???
-  val massX: Float = ???
-  val massY: Float = ???
-  val total: Int = ???
+  val centerX: Float = (nw.centerX + ne.centerX + sw.centerX + se.centerX) / 4
+  val centerY: Float = (nw.centerY + ne.centerY + sw.centerY + se.centerY) / 4
+  val size: Float = 2 * nw.size
+  val mass: Float = nw.mass + ne.mass + sw.mass + se.mass
+  val massX: Float = if (mass != 0) {(nw.mass * nw.massX + ne.mass * ne.massX + sw.mass * sw.massX + se.mass * se.massX) / mass} else {centerX}
+  val massY: Float = if (mass != 0) {(nw.mass * nw.massY + ne.mass * ne.massY + sw.mass * sw.massY + se.mass * se.massY) / mass} else {centerY}
+  val total: Int = nw.total + ne.total + sw.total + se.total
 
-  def insert(b: Body): Fork =
-    ???
+  def insert(b: Body): Fork = {
+    if(b.x < centerX && b.y < centerY) {Fork(nw.insert(b), ne, sw, se)}
+    else if (b.x > centerX && b.y < centerY) {Fork(nw, ne.insert(b), sw, se)}
+    else if (b.x < centerX && b.y > centerY) {Fork(nw, ne, sw.insert(b), se)}
+    else {Fork(nw, ne, sw, se.insert(b))}
+  }
 
 case class Leaf(centerX: Float, centerY: Float, size: Float, bodies: coll.Seq[Body])
 extends Quad:
-  val (mass, massX, massY) = (??? : Float, ??? : Float, ??? : Float)
-  val total: Int = ???
-  def insert(b: Body): Quad = ???
+  val (mass, massX, massY) = (bodies.foldLeft(0: Float)((s, b) => s + b.mass) : Float, bodies.foldLeft(0: Float)((s, b) => s + b.mass * b.x) / bodies.foldLeft(0: Float)((s, b) => s + b.mass) : Float, bodies.foldLeft(0: Float)((s, b) => s + b.mass * b.y) / bodies.foldLeft(0: Float)((s, b) => s + b.mass) : Float)
+  val total: Int = bodies.length
+  def insert(b: Body): Quad = {
+    if(size > minimumSize) {
+      // create an empty fork
+      val corr = size/4
+      var new_fork = Fork(Empty(centerX - corr, centerY - corr, size/2),
+        Empty(centerX + corr, centerY - corr, size/2),
+        Empty(centerX - corr, centerY + corr, size/2),
+        Empty(centerX + corr, centerY + corr, size/2))
+      // insert all bodies into the new fork
+      var idx = 0
+      val bodies_upd = bodies :+ b
+      while (idx < bodies_upd.length) {
+        new_fork = new_fork.insert(bodies_upd.apply(idx))
+        idx = idx + 1
+      }
+      new_fork
+    } else {
+      Leaf(centerX, centerY, size, bodies :+ b)
+    }
+  }
 
 def minimumSize = 0.00001f
 
@@ -112,11 +135,11 @@ class Body(val mass: Float, val x: Float, val y: Float, val xspeed: Float, val y
         netforcey += dforcey
 
     def traverse(quad: Quad): Unit = (quad: Quad) match
-      case Empty(_, _, _) =>
+      case Empty(_, _, _) => addForce(0, quad.centerX, quad.centerY)
         // no force
-      case Leaf(_, _, _, bodies) =>
+      case Leaf(_, _, _, bodies) => for (b <- bodies) {addForce(b.mass, b.x, b.y)}
         // add force contribution of each body by calling addForce
-      case Fork(nw, ne, sw, se) =>
+      case Fork(nw, ne, sw, se) => if (quad.size / distance(x, y, quad.massX, quad.massY) < theta) {addForce(quad.mass, quad.massX, quad.massY)} else {traverse(nw); traverse(ne); traverse(sw); traverse(se)}
         // see if node is far enough from the body,
         // or recursion is needed
 
@@ -137,14 +160,31 @@ class SectorMatrix(val boundaries: Boundaries, val sectorPrecision: Int) extends
   val matrix = new Array[ConcBuffer[Body]](sectorPrecision * sectorPrecision)
   for i <- 0 until matrix.length do matrix(i) = ConcBuffer()
 
-  def +=(b: Body): SectorMatrix =
-    ???
+  def +=(b: Body): SectorMatrix = {
+    var sec_x = ((b.x - boundaries.minX)/boundaries.width).toInt
+    var sec_y = ((b.y - boundaries.minY)/boundaries.height).toInt
+    // updates in case the body lies outside the boundaries
+    if(sec_x < 0) {sec_x = 0}
+    if (sec_x >= sectorPrecision) { sec_x = sectorPrecision - 1}
+    if(sec_y < 0) {sec_y = 0}
+    if (sec_y >= sectorPrecision) { sec_y = sectorPrecision - 1}
+    // update the matrix
+    matrix(sec_y * sectorPrecision + sec_x) = this.apply(sec_x, sec_y) += b
     this
+  }
 
   def apply(x: Int, y: Int) = matrix(y * sectorPrecision + x)
 
-  def combine(that: SectorMatrix): SectorMatrix =
-    ???
+  def combine(that: SectorMatrix): SectorMatrix = {
+    val sect_matrix = new SectorMatrix(boundaries, sectorPrecision)
+    for (idx <- 0 until sect_matrix.matrix.length) {
+      val cbuff1 = this.matrix.apply(idx)
+      val cbuff2 = that.matrix.apply(idx)
+      cbuff1.foreach( b => sect_matrix.matrix(idx) = sect_matrix.matrix(idx) += b)
+      cbuff2.foreach( b => sect_matrix.matrix(idx) = sect_matrix.matrix(idx) += b)
+    }
+    sect_matrix
+  }
 
   def toQuad(parallelism: Int): Quad =
     def BALANCING_FACTOR = 4
